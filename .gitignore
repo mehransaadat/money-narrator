@@ -1,0 +1,19 @@
+# Virtual environment
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Environment variables
+.env
+
+# Database (added in later steps)
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
