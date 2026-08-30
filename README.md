@@ -4,11 +4,14 @@ Backend for MoneyNarrator, built with **Python + FastAPI**. This is a
 backend-only project — there is no frontend yet (that comes later, in
 JavaScript, once the API is complete and tested).
 
-## Current status: Step 1 — Project skeleton
+## Current status: Step 2 — Database setup (SQLAlchemy models)
 
-A minimal FastAPI app with a single health-check endpoint, to confirm the
-project, virtual environment, and dependencies are all working before any
-real features are added.
+Added:
+- `app/database.py` — SQLAlchemy engine, session, and the `get_db` dependency
+- `app/models.py` — `User` and `Transaction` ORM models
+- Tables are auto-created on startup against a local SQLite file
+  (`money_narrator.db`), so there's zero database setup required to run
+  this locally.
 
 ## Requirements
 
@@ -41,6 +44,11 @@ will show `(venv)` at the start of the line.
 uvicorn app.main:app --reload
 ```
 
+On first run, this creates `money_narrator.db` (a SQLite file) in the
+project folder, with the `users` and `transactions` tables already set up
+— you'll see the file appear after starting the server. You can inspect it
+with any SQLite browser if you're curious, but there's no need to for now.
+
 Then open your browser to:
 
 - http://127.0.0.1:8000 — should show `{"message":"MoneyNarrator API is running"}`
@@ -55,10 +63,13 @@ money-narrator-api/
   app/
     __init__.py
     main.py           # FastAPI app instance + the root endpoint
-  requirements.txt     # fastapi, uvicorn
+    database.py        # SQLAlchemy engine, session, get_db dependency
+    models.py           # User and Transaction ORM models
+  requirements.txt     # fastapi, uvicorn, sqlalchemy, python-dotenv
+  .env.example          # DATABASE_URL template
   .gitignore
   README.md
 ```
 
-More files (`database.py`, `models.py`, `schemas.py`, routers, tests) are
-added in the following steps.
+More files (`schemas.py`, routers, auth, tests) are added in the
+following steps.
