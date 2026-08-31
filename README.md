@@ -4,14 +4,20 @@ Backend for MoneyNarrator, built with **Python + FastAPI**. This is a
 backend-only project — there is no frontend yet (that comes later, in
 JavaScript, once the API is complete and tested).
 
-## Current status: Step 2 — Database setup (SQLAlchemy models)
+## Current status: Step 3 — Pydantic schemas
 
-Added:
-- `app/database.py` — SQLAlchemy engine, session, and the `get_db` dependency
-- `app/models.py` — `User` and `Transaction` ORM models
-- Tables are auto-created on startup against a local SQLite file
-  (`money_narrator.db`), so there's zero database setup required to run
-  this locally.
+Added `app/schemas.py`, which defines the exact shape of data the API
+accepts and returns:
+
+- `UserCreate` — what a client sends to register (email + password)
+- `UserOut` — what the API sends back for a user (never includes the
+  password)
+- `TransactionCreate` — what a client sends to create a transaction
+- `TransactionOut` — what the API sends back for a transaction
+
+These are used by FastAPI to automatically validate incoming requests
+(rejecting bad data with a clear error) and to control exactly what shape
+of JSON goes out in responses. No new endpoints yet — those come in step 4.
 
 ## Requirements
 
@@ -65,11 +71,11 @@ money-narrator-api/
     main.py           # FastAPI app instance + the root endpoint
     database.py        # SQLAlchemy engine, session, get_db dependency
     models.py           # User and Transaction ORM models
-  requirements.txt     # fastapi, uvicorn, sqlalchemy, python-dotenv
+    schemas.py           # Pydantic request/response schemas
+  requirements.txt     # fastapi, uvicorn, sqlalchemy, python-dotenv, email-validator
   .env.example          # DATABASE_URL template
   .gitignore
   README.md
 ```
 
-More files (`schemas.py`, routers, auth, tests) are added in the
-following steps.
+More files (auth, routers, tests) are added in the following steps.
