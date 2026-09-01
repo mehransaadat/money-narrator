@@ -4,20 +4,30 @@ Backend for MoneyNarrator, built with **Python + FastAPI**. This is a
 backend-only project — there is no frontend yet (that comes later, in
 JavaScript, once the API is complete and tested).
 
-## Current status: Step 3 — Pydantic schemas
+## Current status: Step 4 — Auth endpoints (register, login, JWT)
 
-Added `app/schemas.py`, which defines the exact shape of data the API
-accepts and returns:
+Added:
+- `app/auth.py` — password hashing (bcrypt) and JWT creation/verification
+- `app/dependencies.py` — `get_current_user`, a reusable dependency that
+  reads the `Authorization: Bearer <token>` header and resolves it to a
+  logged-in user (or raises 401)
+- `app/routers/auth.py` — two endpoints:
+  - `POST /register` — create an account (email + password)
+  - `POST /login` — exchange email + password for a JWT access token
+- `GET /me` in `main.py` — a protected test endpoint that only works with
+  a valid token, to prove the whole auth flow works end-to-end
 
-- `UserCreate` — what a client sends to register (email + password)
-- `UserOut` — what the API sends back for a user (never includes the
-  password)
-- `TransactionCreate` — what a client sends to create a transaction
-- `TransactionOut` — what the API sends back for a transaction
+### Try it via the interactive docs
 
-These are used by FastAPI to automatically validate incoming requests
-(rejecting bad data with a clear error) and to control exactly what shape
-of JSON goes out in responses. No new endpoints yet — those come in step 4.
+1. Start the server and open http://127.0.0.1:8000/docs
+2. Expand **POST /register**, click "Try it out", enter an email/password, execute
+3. Expand **POST /login**, "Try it out", fill in the same email as
+   `username` and your password, execute — copy the `access_token` from
+   the response
+4. Click the green **Authorize** button near the top of the page, paste
+   the token, and click Authorize
+5. Expand **GET /me**, "Try it out", execute — it should return your
+   account instead of a 401 error
 
 ## Requirements
 
@@ -68,14 +78,21 @@ Press `Ctrl+C` in the terminal to stop the server.
 money-narrator-api/
   app/
     __init__.py
-    main.py           # FastAPI app instance + the root endpoint
-    database.py        # SQLAlchemy engine, session, get_db dependency
-    models.py           # User and Transaction ORM models
-    schemas.py           # Pydantic request/response schemas
-  requirements.txt     # fastapi, uvicorn, sqlalchemy, python-dotenv, email-validator
-  .env.example          # DATABASE_URL template
+    main.py             # FastAPI app instance, root + /me endpoints
+    database.py          # SQLAlchemy engine, session, get_db dependency
+    models.py             # User and Transaction ORM models
+    schemas.py             # Pydantic request/response schemas
+    auth.py                 # password hashing + JWT create/verify
+    dependencies.py          # get_current_user (reads the Bearer token)
+    routers/
+      __init__.py
+      auth.py                # POST /register, POST /login
+  requirements.txt     # fastapi, uvicorn, sqlalchemy, python-dotenv,
+                        # email-validator, python-jose, bcrypt, python-multipart
+  .env.example          # DATABASE_URL + SECRET_KEY template
   .gitignore
   README.md
 ```
 
-More files (auth, routers, tests) are added in the following steps.
+More files (transactions router, pytest suite, narrative endpoint) are
+added in the following steps.
