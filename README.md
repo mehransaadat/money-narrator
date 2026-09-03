@@ -4,30 +4,42 @@ Backend for MoneyNarrator, built with **Python + FastAPI**. This is a
 backend-only project — there is no frontend yet (that comes later, in
 JavaScript, once the API is complete and tested).
 
-## Current status: Step 4 — Auth endpoints (register, login, JWT)
+## Current status: Step 5 — Transactions CRUD endpoints
 
-Added:
-- `app/auth.py` — password hashing (bcrypt) and JWT creation/verification
-- `app/dependencies.py` — `get_current_user`, a reusable dependency that
-  reads the `Authorization: Bearer <token>` header and resolves it to a
-  logged-in user (or raises 401)
-- `app/routers/auth.py` — two endpoints:
-  - `POST /register` — create an account (email + password)
-  - `POST /login` — exchange email + password for a JWT access token
-- `GET /me` in `main.py` — a protected test endpoint that only works with
-  a valid token, to prove the whole auth flow works end-to-end
+Added `app/routers/transactions.py`, with three endpoints, all requiring a
+valid Bearer token (from `/login`) and all scoped to the logged-in user
+only:
+
+- `POST /transactions` — create a transaction (amount must be positive)
+- `GET /transactions` — list your own transactions, most recent first
+- `DELETE /transactions/{id}` — delete one of your own transactions
+  (404 if it doesn't exist or belongs to someone else)
+
+Each user only ever sees their own data — this is enforced in the
+database query itself (`WHERE user_id = current_user.id`), not just in
+the UI, so there's no way to accidentally leak another user's
+transactions.
 
 ### Try it via the interactive docs
 
-1. Start the server and open http://127.0.0.1:8000/docs
-2. Expand **POST /register**, click "Try it out", enter an email/password, execute
-3. Expand **POST /login**, "Try it out", fill in the same email as
-   `username` and your password, execute — copy the `access_token` from
-   the response
-4. Click the green **Authorize** button near the top of the page, paste
-   the token, and click Authorize
-5. Expand **GET /me**, "Try it out", execute — it should return your
-   account instead of a 401 error
+1. Authorize first (register/login, then click **Authorize** and paste
+   the token — same as step 4).
+2. Expand **POST /transactions**, "Try it out", fill in a JSON body like:
+   ```json
+   {
+     "type": "discretionary",
+     "category": "Dining Out",
+     "description": "Lunch",
+     "amount": "25.50",
+     "txn_date": "2026-01-15"
+   }
+   ```
+   Execute — you should get a 201 response with the created transaction
+   (including its new `id`).
+3. Expand **GET /transactions**, "Try it out", Execute — you should see
+   the transaction you just created.
+4. Expand **DELETE /transactions/{transaction_id}**, enter that `id`,
+   Execute — should return 204. Running GET again should show it gone.
 
 ## Requirements
 
@@ -87,6 +99,7 @@ money-narrator-api/
     routers/
       __init__.py
       auth.py                # POST /register, POST /login
+      transactions.py         # POST/GET/DELETE /transactions (auth-protected)
   requirements.txt     # fastapi, uvicorn, sqlalchemy, python-dotenv,
                         # email-validator, python-jose, bcrypt, python-multipart
   .env.example          # DATABASE_URL + SECRET_KEY template
@@ -94,5 +107,5 @@ money-narrator-api/
   README.md
 ```
 
-More files (transactions router, pytest suite, narrative endpoint) are
-added in the following steps.
+More files (pytest suite, narrative endpoint) are added in the following
+steps.
