@@ -3,7 +3,7 @@ from fastapi import Depends, FastAPI
 from .database import Base, engine
 from . import models, schemas  # noqa: F401 - imported so Base knows about the models
 from .dependencies import get_current_user
-from .routers import auth
+from .routers import auth, transactions
 
 # Creates the database tables if they don't already exist.
 # Fine for local development; a real migration tool (e.g. Alembic) would
@@ -13,6 +13,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="MoneyNarrator API")
 
 app.include_router(auth.router)
+app.include_router(transactions.router)
 
 
 @app.get("/")
