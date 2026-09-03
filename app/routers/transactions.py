@@ -68,3 +68,4 @@ def delete_transaction(
 
     db.delete(txn)
     db.commit()
+    
