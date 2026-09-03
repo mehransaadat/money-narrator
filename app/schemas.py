@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 
 
 # ---------- User schemas ----------
@@ -32,7 +32,7 @@ class TransactionCreate(BaseModel):
     type: TransactionType
     category: str
     description: str
-    amount: Decimal
+    amount: Decimal = Field(gt=0, description="Must be positive; sign is implied by 'type'")
     txn_date: date
 
 
