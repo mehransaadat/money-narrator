@@ -4,42 +4,36 @@ Backend for MoneyNarrator, built with **Python + FastAPI**. This is a
 backend-only project — there is no frontend yet (that comes later, in
 JavaScript, once the API is complete and tested).
 
-## Current status: Step 5 — Transactions CRUD endpoints
+## Current status: Step 6 — pytest test suite
 
-Added `app/routers/transactions.py`, with three endpoints, all requiring a
-valid Bearer token (from `/login`) and all scoped to the logged-in user
-only:
+Added an automated test suite covering everything built in steps 2-5:
 
-- `POST /transactions` — create a transaction (amount must be positive)
-- `GET /transactions` — list your own transactions, most recent first
-- `DELETE /transactions/{id}` — delete one of your own transactions
-  (404 if it doesn't exist or belongs to someone else)
+- `tests/conftest.py` — pytest fixtures: an isolated in-memory test
+  database (separate from your real `money_narrator.db`) and a
+  `TestClient` wired to use it, plus an `auth_headers` fixture that
+  registers + logs in a throwaway user for tests that need to be
+  authenticated
+- `tests/test_auth.py` — 8 tests covering registration (success,
+  duplicate email, invalid email) and login (success, wrong password,
+  unknown email) and the `/me` endpoint (rejected without a token,
+  works with one)
+- `tests/test_transactions.py` — 10 tests covering create (success,
+  rejected without a token, negative/zero amount rejected, invalid type
+  rejected), list (only returns your own transactions), and delete
+  (removes it, 404 on a missing one, can't delete someone else's)
 
-Each user only ever sees their own data — this is enforced in the
-database query itself (`WHERE user_id = current_user.id`), not just in
-the UI, so there's no way to accidentally leak another user's
-transactions.
+**18 tests total, all passing.** These tests don't touch your real
+database or the network — they spin up a fresh in-memory database for
+each test, so running them is fast and never risks your real data.
 
-### Try it via the interactive docs
+### Run the tests
 
-1. Authorize first (register/login, then click **Authorize** and paste
-   the token — same as step 4).
-2. Expand **POST /transactions**, "Try it out", fill in a JSON body like:
-   ```json
-   {
-     "type": "discretionary",
-     "category": "Dining Out",
-     "description": "Lunch",
-     "amount": "25.50",
-     "txn_date": "2026-01-15"
-   }
-   ```
-   Execute — you should get a 201 response with the created transaction
-   (including its new `id`).
-3. Expand **GET /transactions**, "Try it out", Execute — you should see
-   the transaction you just created.
-4. Expand **DELETE /transactions/{transaction_id}**, enter that `id`,
-   Execute — should return 204. Running GET again should show it gone.
+```bash
+pytest -v
+```
+
+You should see all 18 tests pass. Run this any time you change the
+backend to make sure nothing broke.
 
 ## Requirements
 
@@ -100,12 +94,17 @@ money-narrator-api/
       __init__.py
       auth.py                # POST /register, POST /login
       transactions.py         # POST/GET/DELETE /transactions (auth-protected)
+  tests/
+    __init__.py
+    conftest.py            # test DB fixture, test client, auth_headers fixture
+    test_auth.py            # 8 tests: register, login, /me
+    test_transactions.py     # 10 tests: create, list, delete
   requirements.txt     # fastapi, uvicorn, sqlalchemy, python-dotenv,
-                        # email-validator, python-jose, bcrypt, python-multipart
+                        # email-validator, python-jose, bcrypt,
+                        # python-multipart, pytest, httpx2
   .env.example          # DATABASE_URL + SECRET_KEY template
   .gitignore
   README.md
 ```
 
-More files (pytest suite, narrative endpoint) are added in the following
-steps.
+Next: the AI narrative endpoint (step 7) and its tests (step 8).
