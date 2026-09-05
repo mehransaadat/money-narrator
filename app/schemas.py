@@ -47,3 +47,18 @@ class TransactionOut(BaseModel):
     amount: Decimal
     txn_date: date
     created_at: datetime
+
+
+# ---------- Narrative report schemas (step 7) ----------
+
+NarrativeTone = Literal["encouraging", "analyst", "blunt", "storyteller"]
+
+
+class NarrativeRequest(BaseModel):
+    """What the client sends to POST /narrative."""
+    tone: NarrativeTone = "encouraging"
+
+
+class NarrativeResponse(BaseModel):
+    """What the API sends back from POST /narrative."""
+    narrative: str
