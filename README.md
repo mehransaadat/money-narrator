@@ -4,36 +4,44 @@ Backend for MoneyNarrator, built with **Python + FastAPI**. This is a
 backend-only project — there is no frontend yet (that comes later, in
 JavaScript, once the API is complete and tested).
 
-## Current status: Step 6 — pytest test suite
+## Current status: Step 7 — AI narrative endpoint
 
-Added an automated test suite covering everything built in steps 2-5:
+Added:
+- `app/services/ai_service.py` — aggregates a user's transactions
+  (totals, spending by category, recent transactions) and calls an AI
+  provider through OpenRouter's free model router to generate a written
+  report
+- `app/routers/narrative.py` — `POST /narrative`, an auth-protected
+  endpoint that summarizes the **logged-in user's own transactions**
+  (fetched from the database, not sent by the client) in a selectable
+  tone
 
-- `tests/conftest.py` — pytest fixtures: an isolated in-memory test
-  database (separate from your real `money_narrator.db`) and a
-  `TestClient` wired to use it, plus an `auth_headers` fixture that
-  registers + logs in a throwaway user for tests that need to be
-  authenticated
-- `tests/test_auth.py` — 8 tests covering registration (success,
-  duplicate email, invalid email) and login (success, wrong password,
-  unknown email) and the `/me` endpoint (rejected without a token,
-  works with one)
-- `tests/test_transactions.py` — 10 tests covering create (success,
-  rejected without a token, negative/zero amount rejected, invalid type
-  rejected), list (only returns your own transactions), and delete
-  (removes it, 404 on a missing one, can't delete someone else's)
+### Tones available
 
-**18 tests total, all passing.** These tests don't touch your real
-database or the network — they spin up a fresh in-memory database for
-each test, so running them is fast and never risks your real data.
+`encouraging` (default) &middot; `analyst` &middot; `blunt` &middot; `storyteller`
 
-### Run the tests
+### Setup: add your OpenRouter key
 
-```bash
-pytest -v
-```
+1. Copy `.env.example` to `.env` if you haven't already.
+2. Get a free key at https://openrouter.ai (Settings → Keys → Create
+   Key) — no credit card required. This is the same key from the
+   Next.js version of this project, if you still have it.
+3. Put it in `.env` as `OPENROUTER_API_KEY=...`.
 
-You should see all 18 tests pass. Run this any time you change the
-backend to make sure nothing broke.
+### Try it via the interactive docs
+
+1. Authorize (register/login, click **Authorize**, paste the token).
+2. Add at least one transaction via **POST /transactions** (see step 5
+   instructions below) — the narrative endpoint has nothing to
+   summarize otherwise and returns a 400 error.
+3. Expand **POST /narrative**, "Try it out", body:
+   ```json
+   { "tone": "encouraging" }
+   ```
+   Execute — you should get back a written report based on your real
+   transactions.
+4. Try the other tones (`analyst`, `blunt`, `storyteller`) to see how
+   the report changes.
 
 ## Requirements
 
@@ -55,10 +63,11 @@ source venv/bin/activate
 
 # 3. Install dependencies
 pip install -r requirements.txt
-```
 
-You'll know the virtual environment is active because your terminal prompt
-will show `(venv)` at the start of the line.
+# 4. Set up your .env file
+cp .env.example .env
+# then edit .env and fill in SECRET_KEY and OPENROUTER_API_KEY
+```
 
 ## Run the server
 
@@ -66,17 +75,17 @@ will show `(venv)` at the start of the line.
 uvicorn app.main:app --reload
 ```
 
-On first run, this creates `money_narrator.db` (a SQLite file) in the
-project folder, with the `users` and `transactions` tables already set up
-— you'll see the file appear after starting the server. You can inspect it
-with any SQLite browser if you're curious, but there's no need to for now.
+- http://127.0.0.1:8000 — health check
+- http://127.0.0.1:8000/docs — interactive API docs
 
-Then open your browser to:
+## Run the tests
 
-- http://127.0.0.1:8000 — should show `{"message":"MoneyNarrator API is running"}`
-- http://127.0.0.1:8000/docs — FastAPI's automatic interactive API docs
+```bash
+pytest -v
+```
 
-Press `Ctrl+C` in the terminal to stop the server.
+18 tests covering auth and transactions (see step 6 below). Narrative
+endpoint tests come in step 8.
 
 ## Project structure so far
 
@@ -84,7 +93,7 @@ Press `Ctrl+C` in the terminal to stop the server.
 money-narrator-api/
   app/
     __init__.py
-    main.py             # FastAPI app instance, root + /me endpoints
+    main.py             # FastAPI app instance, wires up all routers
     database.py          # SQLAlchemy engine, session, get_db dependency
     models.py             # User and Transaction ORM models
     schemas.py             # Pydantic request/response schemas
@@ -93,7 +102,11 @@ money-narrator-api/
     routers/
       __init__.py
       auth.py                # POST /register, POST /login
-      transactions.py         # POST/GET/DELETE /transactions (auth-protected)
+      transactions.py         # POST/GET/DELETE /transactions
+      narrative.py             # POST /narrative
+    services/
+      __init__.py
+      ai_service.py            # aggregation + OpenRouter call
   tests/
     __init__.py
     conftest.py            # test DB fixture, test client, auth_headers fixture
@@ -101,10 +114,11 @@ money-narrator-api/
     test_transactions.py     # 10 tests: create, list, delete
   requirements.txt     # fastapi, uvicorn, sqlalchemy, python-dotenv,
                         # email-validator, python-jose, bcrypt,
-                        # python-multipart, pytest, httpx2
-  .env.example          # DATABASE_URL + SECRET_KEY template
+                        # python-multipart, pytest, httpx2, openai
+  .env.example          # DATABASE_URL + SECRET_KEY + OPENROUTER_API_KEY template
   .gitignore
   README.md
 ```
 
-Next: the AI narrative endpoint (step 7) and its tests (step 8).
+Next: pytest tests for the narrative endpoint with the AI call mocked
+(step 8), then the JavaScript frontend (step 9).
