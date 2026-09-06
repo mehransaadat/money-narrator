@@ -114,11 +114,24 @@ def generate_narrative(transactions: list[models.Transaction], tone: str) -> str
 
     completion = client.chat.completions.create(
         model="openrouter/free",
-        max_tokens=700,
+        max_tokens=2000,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
+        # Many free OpenRouter models are "reasoning" models that spend
+        # tokens on hidden step-by-step thinking before writing the final
+        # answer. Keeping reasoning effort low leaves more of the token
+        # budget for the actual visible report, instead of coming back empty.
+        extra_body={"reasoning": {"effort": "low"}},
     )
 
-    return completion.choices[0].message.content or ""
+    content = completion.choices[0].message.content or ""
+
+    if not content.strip():
+        raise RuntimeError(
+            "The AI provider returned an empty response. This can happen "
+            "if a free model is overloaded — please try again."
+        )
+
+    return content
