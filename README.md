@@ -134,4 +134,23 @@ money-narrator-api/
   README.md
 ```
 
-Next step: Docker + stress testing, then the JavaScript frontend.
+## Running with Docker
+
+Once you have Docker Desktop installed and running:
+
+```bash
+docker compose up --build
+```
+
+This builds the image and starts the API at http://127.0.0.1:8000 —
+exactly the same endpoints as running it locally, just inside a
+container. Press `Ctrl+C` to stop it.
+
+To run it without docker-compose (plain Docker):
+
+```bash
+docker build -t money-narrator-api .
+docker run -p 8000:8000 --env-file .env money-narrator-api
+```
+
+Next: Docker + stress testing, then the JavaScript frontend.
