@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Mounts your code into the container so you don't have to rebuild
+      # the image every time you change a file -- combine with --reload
+      # in the Dockerfile's CMD if you want live-reload during development.
+      - .:/app
