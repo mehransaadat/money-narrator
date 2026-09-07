@@ -134,4 +134,4 @@ money-narrator-api/
   README.md
 ```
 
-Next: Docker + stress testing, then the JavaScript frontend.
+Next step: Docker + stress testing, then the JavaScript frontend.
