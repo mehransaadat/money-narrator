@@ -153,4 +153,48 @@ docker build -t money-narrator-api .
 docker run -p 8000:8000 --env-file .env money-narrator-api
 ```
 
-Next: Docker + stress testing, then the JavaScript frontend.
+## Stress testing with Locust
+
+`locustfile.py` simulates realistic traffic against your running API:
+simulated users register, log in, create/list/delete transactions.
+
+### Run it
+
+1. Start the API first, in its own terminal (either `uvicorn app.main:app`
+   or `docker compose up`).
+2. In a second terminal:
+   ```bash
+   locust -f locustfile.py --host http://127.0.0.1:8000
+   ```
+3. Open http://localhost:8089 in your browser.
+4. Enter a number of users (e.g. `20`) and a spawn rate (e.g. `2` users/sec),
+   then click **Start**.
+5. Watch the charts: request rate, response times, and failure rate update
+   live. Click **Stop** when you've seen enough.
+
+### What to look for
+
+- **Response time going up as users increase** — normal to a point; a
+  sharp cliff means you've found your API's breaking point.
+- **Failures appearing** — check the "Failures" tab for which endpoint
+  and why.
+- `POST /register` and `POST /login` are expected to be the slowest
+  endpoints under load — they use `bcrypt` for password hashing, which
+  is deliberately CPU-intensive for security. This is normal; if it
+  becomes a real bottleneck later, the fix is running multiple server
+  workers (`uvicorn ... --workers 4`), not weakening the hashing.
+
+### Testing the AI narrative endpoint separately
+
+Don't include `/narrative` in a big load test — it calls a real,
+rate-limited external AI provider (OpenRouter's free tier), so hundreds
+of concurrent requests will just hit that rate limit rather than test
+your own API. Test it on its own, with very few simulated users:
+
+```bash
+locust -f locustfile.py --host http://127.0.0.1:8000 NarrativeUser
+```
+
+Then use just 1-2 users in the web UI.
+
+Next: the JavaScript frontend.
