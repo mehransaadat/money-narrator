@@ -197,5 +197,6 @@ locust -f locustfile.py --host http://127.0.0.1:8000 NarrativeUser
 
 Then use just 1-2 users in the web UI.
 The Docker file was created.
+The project for stress testing with Docker is ready.
 
 Next: the JavaScript frontend.
