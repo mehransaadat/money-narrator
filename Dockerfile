@@ -11,8 +11,10 @@ WORKDIR /app
 # Install dependencies first, separately from the app code. Docker caches
 # each instruction as a layer -- as long as requirements.txt doesn't
 # change, this layer is reused on rebuilds, making them much faster.
+# --timeout and --retries are increased here to tolerate a slow or
+# unstable internet connection during download.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 180 --retries 10 -r requirements.txt
 
 # Now copy the rest of the application code.
 COPY . .
