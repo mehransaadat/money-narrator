@@ -10,3 +10,18 @@ services:
       # the image every time you change a file -- combine with --reload
       # in the Dockerfile's CMD if you want live-reload during development.
       - .:/app
+
+  locust:
+    # Official Locust image -- runs the load-testing tool itself inside
+    # its own container, so nothing needs to be installed on your host.
+    image: locustio/locust
+    ports:
+      - "8089:8089"
+    volumes:
+      - .:/mnt/locust
+    # "api" here is the other service's name above -- Docker Compose lets
+    # containers reach each other by service name over an internal
+    # network, so this is NOT the same as http://127.0.0.1:8000.
+    command: -f /mnt/locust/locustfile.py --host http://api:8000
+    depends_on:
+      - api
