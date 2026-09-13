@@ -1,10 +1,42 @@
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: moneynarrator
+      POSTGRES_PASSWORD: moneynarrator
+      POSTGRES_DB: moneynarrator
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persists database data across `docker compose down` -- without
+      # this, all data would vanish every time the postgres container
+      # is removed.
+      - postgres_data:/var/lib/postgresql/data
+    # Raised from Postgres's default of 100 so the direct-to-database
+    # stress test (which opens many concurrent connections) has room,
+    # alongside whatever the api service is using.
+    command: ["postgres", "-c", "max_connections=300"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moneynarrator"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build: .
     ports:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # Overrides whatever DATABASE_URL is in your .env file -- "db" is
+      # the postgres service name above, resolved over Compose's internal
+      # network (not the same as 127.0.0.1).
+      DATABASE_URL: postgresql://moneynarrator:moneynarrator@db:5432/moneynarrator
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       # Mounts your code into the container so you don't have to rebuild
       # the image every time you change a file -- combine with --reload
@@ -25,3 +57,25 @@ services:
     command: -f /mnt/locust/locustfile.py --host http://api:8000
     depends_on:
       - api
+
+  db-stress-test:
+    # Connects DIRECTLY to postgres via psycopg2 -- never touches the
+    # api service, FastAPI, or HTTP at all. Only runs when explicitly
+    # requested (see the "stress-test" profile below), never with a
+    # plain `docker compose up`.
+    build: .
+    environment:
+      DATABASE_URL: postgresql://moneynarrator:moneynarrator@db:5432/moneynarrator
+      STRESS_USERS: "1000"
+      STRESS_MAX_CONCURRENT: "50"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: ["python", "db_stress_test.py"]
+    profiles:
+      - stress-test
+
+volumes:
+  postgres_data:
