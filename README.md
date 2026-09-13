@@ -196,8 +196,65 @@ locust -f locustfile.py --host http://127.0.0.1:8000 NarrativeUser
 ```
 
 Then use just 1-2 users in the web UI.
-The Docker file was created.
-The project for stress testing with Docker is ready.
-The stress test was successfully completed.
+
+## Database-only stress test (bypasses the backend entirely)
+
+The Locust test above measures your **whole API stack** under load
+(FastAPI routing, JWT auth, bcrypt hashing, and the database all
+together). `db_stress_test.py` instead connects **directly to
+PostgreSQL** with `psycopg2` — no HTTP requests, no FastAPI, no
+Pydantic, no bcrypt — to measure the database's own performance in
+isolation.
+
+By default it simulates **1000 concurrent users**, each doing:
+1. `INSERT` one row into `users`
+2. `INSERT` 5 rows into `transactions`
+3. `SELECT` them back
+4. `DELETE` about half of them
+
+### Run it
+
+```bash
+docker compose --profile stress-test run --rm db-stress-test
+```
+
+This only starts `db` (if not already running) and the stress-test
+script — it does **not** start or touch the `api` service at all.
+
+### Reading the results
+
+The script prints a summary like:
+```
+Total simulated users  : 1000
+Successful              : 1000
+Errors                  : 0
+Total wall-clock time   : 4.82s
+Throughput               : 207.5 simulated users/sec
+Average latency per operation (successful runs only):
+  INSERT users         : 3.21 ms
+  INSERT transactions  : 9.84 ms  (for 5 rows)
+  SELECT               : 1.05 ms
+  DELETE               : 2.40 ms
+```
+
+- **Throughput** (simulated users/sec) is the headline number — how
+  many complete user workflows PostgreSQL can process per second on
+  your machine, with zero API overhead.
+- **Errors** should be 0. If you see connection errors, PostgreSQL's
+  `max_connections` (set to 300 in `docker-compose.yml` for this
+  service) may need to be raised further, or `STRESS_MAX_CONCURRENT`
+  lowered.
+- Try changing the number of simulated users via an environment
+  variable, e.g. for 2000 users:
+  ```bash
+  docker compose --profile stress-test run --rm -e STRESS_USERS=2000 db-stress-test
+  ```
+
+This number is a ceiling for your database alone; your actual API will
+be slower than this because of the auth/hashing/routing overhead the
+Locust test captures instead. Together, the two tests answer different
+questions: `db_stress_test.py` answers "how fast is my database, at
+most?" and Locust answers "how does my actual API behave under
+realistic use?"
 
 Next: the JavaScript frontend.
