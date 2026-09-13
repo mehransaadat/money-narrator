@@ -10,3 +10,4 @@ pytest
 httpx2
 openai
 locust
+psycopg2-binary
