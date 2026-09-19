@@ -155,47 +155,90 @@ docker run -p 8000:8000 --env-file .env money-narrator-api
 
 ## Stress testing with Locust
 
-`locustfile.py` simulates realistic traffic against your running API:
-simulated users register, log in, create/list/delete transactions.
+`locustfile.py` simulates realistic traffic against the running API: each
+simulated user registers and logs in **once**, then keeps listing /
+creating / deleting transactions and calling `/me`. Every response is
+checked against its expected status code (201 / 200 / 204), so the
+"Failures" tab shows the real reason a request failed.
 
-### Run it
+### 1. Give Docker the right resources (once)
 
-1. Start the API first, in its own terminal (either `uvicorn app.main:app`
-   or `docker compose up`).
-2. In a second terminal:
-   ```bash
-   locust -f locustfile.py --host http://127.0.0.1:8000
-   ```
-3. Open http://localhost:8089 in your browser.
-4. Enter a number of users (e.g. `20`) and a spawn rate (e.g. `2` users/sec),
-   then click **Start**.
-5. Watch the charts: request rate, response times, and failure rate update
-   live. Click **Stop** when you've seen enough.
+Copy `wslconfig.example` to `C:\Users\<you>\.wslconfig`, then run
+`wsl --shutdown` in PowerShell and restart Docker Desktop. This gives
+Docker 8 GB of RAM and 6 of the 8 CPU threads. (If Docker Desktop uses the
+Hyper-V backend instead of WSL 2, set the same values under
+Settings -> Resources.)
+
+`docker-compose.yml` splits that budget: `db` 2 CPUs / 2.5 GB,
+`api` 3 CPUs / 3 GB (3 uvicorn workers), `locust` 1 CPU / 1 GB.
+
+### 2. Web UI (manual control)
+
+```bash
+docker compose up -d --build db api
+docker compose up locust
+```
+
+Open http://localhost:8089, enter users + spawn rate, click **Start**.
+
+Keep the spawn rate at **5 users/s or less**: every new user costs two
+bcrypt operations (register + login), which is what limits how fast users
+can be added on this CPU.
+
+### 3. Automatic staged run (recommended)
+
+```bash
+docker compose --profile load-test run --rm locust-headless
+```
+
+Follows the stages in `stress_shape.py` (20 -> 50 -> 100 -> 150 -> 200 ->
+250 users, ~11 minutes), stops early if the API starts failing, and writes
+`results/report.html` plus CSV files. Override the stages without editing
+code, e.g. a 3-minute smoke run:
+
+```bash
+docker compose --profile load-test run --rm -e STRESS_STAGES="60:10:2,180:30:3" locust-headless
+```
+
+The run ends with `VERDICT: PASS/FAIL` (failures above 1 % or p95 above
+2000 ms; adjust with `LOCUST_MAX_FAIL_RATIO` / `LOCUST_MAX_P95_MS`) and
+the container's exit code follows it.
+
+### Other scenarios (`locustfile_extra.py`)
+
+```bash
+# bcrypt / CPU worst case: new account + login on every iteration (5-20 users)
+docker compose run --rm --service-ports locust -f /mnt/locust/locustfile_extra.py --host http://api:8000 AuthStressUser
+
+# AI narrative endpoint: real OpenRouter calls, use 1-2 users only
+docker compose run --rm --service-ports locust -f /mnt/locust/locustfile_extra.py --host http://api:8000 NarrativeUser
+```
+
+### Changing the number of API workers
+
+```bash
+API_WORKERS=4 docker compose up -d api
+```
 
 ### What to look for
 
-- **Response time going up as users increase** — normal to a point; a
-  sharp cliff means you've found your API's breaking point.
-- **Failures appearing** — check the "Failures" tab for which endpoint
-  and why.
-- `POST /register` and `POST /login` are expected to be the slowest
-  endpoints under load — they use `bcrypt` for password hashing, which
-  is deliberately CPU-intensive for security. This is normal; if it
-  becomes a real bottleneck later, the fix is running multiple server
-  workers (`uvicorn ... --workers 4`), not weakening the hashing.
+- **Response time climbing with users** is normal up to a point; a sharp
+  cliff is the breaking point. Compare `/transactions [GET]` (pure
+  database + JSON) against `/register` and `/login` (bcrypt, CPU).
+- **Failures** -- open the Failures tab. `HTTP 500` together with
+  `QueuePool limit ... reached` in `docker compose logs api` means
+  SQLAlchemy's default pool (5 + 10 connections per worker) is too small
+  for the request threads; raise `pool_size` / `max_overflow` in
+  `app/database.py`.
+- Check RAM/CPU during a run with `docker stats`.
 
-### Testing the AI narrative endpoint separately
+### Cleaning up test data
 
-Don't include `/narrative` in a big load test — it calls a real,
-rate-limited external AI provider (OpenRouter's free tier), so hundreds
-of concurrent requests will just hit that rate limit rather than test
-your own API. Test it on its own, with very few simulated users:
+Each run leaves its users in PostgreSQL. Remove them with:
 
 ```bash
-locust -f locustfile.py --host http://127.0.0.1:8000 NarrativeUser
+docker compose exec db psql -U moneynarrator -c "DELETE FROM transactions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'loadtest-%@example.com' OR email LIKE 'authstress-%@example.com' OR email LIKE 'narrtest-%@example.com'); DELETE FROM users WHERE email LIKE 'loadtest-%@example.com' OR email LIKE 'authstress-%@example.com' OR email LIKE 'narrtest-%@example.com';"
 ```
-
-Then use just 1-2 users in the web UI.
 
 ## Database-only stress test (bypasses the backend entirely)
 
