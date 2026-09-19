@@ -1,3 +1,23 @@
+# =====================================================================
+# Resource plan for this machine
+#   Laptop : Intel Core i5-9300H (4 cores / 8 threads), 12 GB RAM
+#   Docker : 8 GB RAM, 6 of the 8 threads  (set in %UserProfile%\.wslconfig,
+#            see wslconfig.example -- this is what actually caps Docker
+#            Desktop's RAM; the limits below split that budget)
+#
+#   service          CPUs   RAM     notes
+#   ---------------  -----  ------  ---------------------------------
+#   db               2.0    2.5 GB  shared_buffers 512 MB
+#   api              3.0    3.0 GB  3 uvicorn workers (bcrypt is CPU-bound)
+#   locust           1.0    1.0 GB  one Locust process is enough here
+#   ---------------  -----  ------
+#   total            6.0    6.5 GB  ~1.5 GB left for WSL/Docker itself and
+#                                   the on-demand db-stress-test container
+#
+# The limits only matter while something is actually running; unused
+# budget is not reserved.
+# =====================================================================
+
 services:
   db:
     image: postgres:16-alpine
@@ -13,15 +33,35 @@ services:
       # this, all data would vanish every time the postgres container
       # is removed.
       - postgres_data:/var/lib/postgresql/data
-    # Raised from Postgres's default of 100 so the direct-to-database
-    # stress test (which opens many concurrent connections) has room,
-    # alongside whatever the api service is using.
-    command: ["postgres", "-c", "max_connections=300"]
+    # Docker's default /dev/shm is 64 MB, too small once shared_buffers
+    # is raised and parallel queries start using shared memory.
+    shm_size: 256mb
+    command:
+      - postgres
+      # Raised from Postgres's default of 100 so the direct-to-database
+      # stress test (many concurrent connections) has room next to the api.
+      - -c
+      - max_connections=300
+      # Sized for a 2.5 GB container (~20% of it for the buffer cache; the
+      # rest is left to backends and the OS page cache).
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U moneynarrator"]
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2560M
 
   api:
     build: .
@@ -34,29 +74,163 @@ services:
       # the postgres service name above, resolved over Compose's internal
       # network (not the same as 127.0.0.1).
       DATABASE_URL: postgresql://moneynarrator:moneynarrator@db:5432/moneynarrator
+    # Two things happen here:
+    #  1. `python -c "import app.main"` runs ONCE, before any worker
+    #     exists. app/main.py calls Base.metadata.create_all() at import
+    #     time; if 3 workers did that at the same moment on an empty
+    #     database they could race each other on CREATE TABLE.
+    #  2. uvicorn then starts API_WORKERS processes (default 3). Endpoints
+    #     are sync and bcrypt burns a full core per hash, so one worker
+    #     cannot use more than ~1 core; 3 workers match the 3 CPUs below.
+    #     Try API_WORKERS=2 or 4 to see how the numbers change:
+    #       API_WORKERS=4 docker compose up -d api
+    command:
+      - sh
+      - -c
+      - >-
+        python -c "import app.main" &&
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+        --workers ${API_WORKERS:-3}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     depends_on:
       db:
         condition: service_healthy
     volumes:
       # Mounts your code into the container so you don't have to rebuild
-      # the image every time you change a file -- combine with --reload
-      # in the Dockerfile's CMD if you want live-reload during development.
+      # the image every time you change a file.
       - .:/app
+    deploy:
+      resources:
+        limits:
+          cpus: "3.0"
+          memory: 3072M
 
   locust:
-    # Official Locust image -- runs the load-testing tool itself inside
-    # its own container, so nothing needs to be installed on your host.
+    # Web UI mode: http://localhost:8089 -- pick users / spawn rate by hand.
+    # Official Locust image, so nothing needs to be installed on your host.
     image: locustio/locust
     ports:
       - "8089:8089"
     volumes:
       - .:/mnt/locust
-    # "api" here is the other service's name above -- Docker Compose lets
-    # containers reach each other by service name over an internal
-    # network, so this is NOT the same as http://127.0.0.1:8000.
-    command: -f /mnt/locust/locustfile.py --host http://api:8000
+    # "api" is the other service's name -- containers reach each other by
+    # service name, so this is NOT http://127.0.0.1:8000.
+    command: -f /mnt/locust/locustfile.py --host http://api:8000 --web-host 0.0.0.0
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+
+  locust-staged:
+    # THE ONE-COMMAND STAGED TEST WITH LIVE CHARTS:
+    #   docker compose --profile load-test up locust-staged
+    # Then open http://localhost:8089 -- the test starts by itself and
+    # follows stress_shape.py (20 -> 250 users, ~11 min). Watch the charts
+    # live. When the last stage ends (or the API starts failing) it stops,
+    # keeps the page open for 30 s, saves the report and exits.
+    #   results/report-<date-time>.html   <- open in the browser
+    #   results/run-<date-time>_*.csv     <- for Excel
+    # Every run gets its own time-stamped file, nothing is overwritten.
+    # Stop the plain "locust" service first (both use port 8089).
+    image: locustio/locust
+    environment:
+      # Passed through from your shell / a .env file; the defaults apply
+      # when you set nothing. Stages format: "end_s:users:rate,..."
+      STRESS_STAGES: "${STRESS_STAGES:-}"
+      STRESS_ABORT_FAIL_RATIO: "${STRESS_ABORT_FAIL_RATIO:-0.25}"
+      STRESS_ABORT_SECONDS: "${STRESS_ABORT_SECONDS:-15}"
+      LOCUST_MAX_FAIL_RATIO: "${LOCUST_MAX_FAIL_RATIO:-0.01}"
+      LOCUST_MAX_P95_MS: "${LOCUST_MAX_P95_MS:-2000}"
+    ports:
+      - "8089:8089"
+    volumes:
+      - .:/mnt/locust
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        mkdir -p /mnt/locust/results &&
+        TS=$$(date +%Y%m%d-%H%M%S) &&
+        echo "Report will be saved to results/report-$$TS.html" &&
+        exec locust
+        --html /mnt/locust/results/report-$$TS.html
+        --csv /mnt/locust/results/run-$$TS
+        "$$@"
+      - locust
+    command: >-
+      -f /mnt/locust/locustfile.py,/mnt/locust/stress_shape.py
+      --host http://api:8000
+      --web-host 0.0.0.0
+      --autostart
+      --autoquit 30
+      --stop-timeout 10
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles:
+      - load-test
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+
+  locust-headless:
+    # Automatic run, no browser: follows the stages in stress_shape.py,
+    # stops by itself (or earlier, if the API starts failing) and writes
+    #   results/report.html          -> open it in the browser
+    #   results/run_stats.csv, ...   -> for Excel / comparing runs
+    # Start it with:
+    #   docker compose --profile load-test run --rm locust-headless
+    # (stop the "locust" web UI service first -- one Locust at a time,
+    # they compete for the same 1 CPU and the same API)
+    image: locustio/locust
+    environment:
+      # Passed through from your shell / a .env file; the defaults apply
+      # when you set nothing. Stages format: "end_s:users:rate,..."
+      STRESS_STAGES: "${STRESS_STAGES:-}"
+      STRESS_ABORT_FAIL_RATIO: "${STRESS_ABORT_FAIL_RATIO:-0.25}"
+      STRESS_ABORT_SECONDS: "${STRESS_ABORT_SECONDS:-15}"
+      LOCUST_MAX_FAIL_RATIO: "${LOCUST_MAX_FAIL_RATIO:-0.01}"
+      LOCUST_MAX_P95_MS: "${LOCUST_MAX_P95_MS:-2000}"
+    volumes:
+      - .:/mnt/locust
+    # Creates the results folder before Locust starts writing into it.
+    entrypoint:
+      - sh
+      - -c
+      - mkdir -p /mnt/locust/results && exec locust "$$@"
+      - locust
+    command: >-
+      -f /mnt/locust/locustfile.py,/mnt/locust/stress_shape.py
+      --host http://api:8000
+      --headless
+      --stop-timeout 10
+      --csv /mnt/locust/results/run
+      --html /mnt/locust/results/report.html
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles:
+      - load-test
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
 
   db-stress-test:
     # Connects DIRECTLY to postgres via psycopg2 -- never touches the
