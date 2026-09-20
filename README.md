@@ -300,4 +300,4 @@ questions: `db_stress_test.py` answers "how fast is my database, at
 most?" and Locust answers "how does my actual API behave under
 realistic use?"
 
-Next: the JavaScript frontend.
+
