@@ -99,4 +99,4 @@ class StagedRamp(LoadTestShape):
         for end_time, users, spawn_rate in STAGES:
             if run_time < end_time:
                 return users, spawn_rate
-        return None  # all stages finished -> stop the test
+        return None  # all stages finished -> stop 
