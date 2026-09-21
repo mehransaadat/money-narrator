@@ -25,3 +25,4 @@ EXPOSE 8000
 # (auto-reload is a dev-only feature and shouldn't run in a container
 # meant to represent production).
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
