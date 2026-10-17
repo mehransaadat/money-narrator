@@ -19,7 +19,7 @@ def create_transaction(
         user_id=current_user.id,
         type=txn_in.type,
         category=txn_in.category,
-        description=txn_in.description,
+        description=txn_in.description.strip() or txn_in.category,
         amount=txn_in.amount,
         txn_date=txn_in.txn_date,
     )
