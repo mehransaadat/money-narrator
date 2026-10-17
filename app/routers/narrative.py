@@ -25,7 +25,12 @@ def create_narrative_report(
     )
 
     try:
-        narrative = generate_narrative(transactions, request.tone)
+        if request.language == "en":
+            narrative = generate_narrative(transactions, request.tone)
+        else:
+            narrative = generate_narrative(
+                transactions, request.tone, language=request.language
+            )
     except NoTransactionsError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
