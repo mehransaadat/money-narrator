@@ -85,7 +85,9 @@ def _summarize(transactions: list[models.Transaction]) -> dict:
     }
 
 
-def generate_narrative(transactions: list[models.Transaction], tone: str) -> str:
+def generate_narrative(
+    transactions: list[models.Transaction], tone: str, language: str = "en"
+) -> str:
     """Aggregates the user's transactions and asks the AI provider for a
     written report in the requested tone. Raises NoTransactionsError if
     there's nothing to summarize.
@@ -111,6 +113,11 @@ def generate_narrative(transactions: list[models.Transaction], tone: str) -> str
         f"Here is the user's financial data as JSON:\n{summary}\n\n"
         "Write the report now."
     )
+    if language == "fa":
+        user_prompt += (
+            "\nWrite the whole report in Persian (Farsi). Keep category names "
+            "and numbers exactly as given."
+        )
 
     completion = client.chat.completions.create(
         model="openrouter/free",
