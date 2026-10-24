@@ -301,3 +301,12 @@ most?" and Locust answers "how does my actual API behave under
 realistic use?"
 
 
+
+
+## Website, admin and demo (new)
+
+- Start the server, then open http://127.0.0.1:8000/app/ — the site opens straight
+  into the dashboard (guest mode, no login).
+- Admin login: footer link "ورود مدیر" using ADMIN_EMAIL / ADMIN_PASSWORD from `.env`
+  (created automatically at startup; default admin@example.com / Admin12345 — change it).
+- `proposal.html` is the client proposal with a working in-browser demo (no server needed).
